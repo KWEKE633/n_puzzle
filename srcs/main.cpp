@@ -49,14 +49,13 @@ class MemoryPool {
 			pool.reserve(initial_capacity);
 		}
 
-		uint32_t allocate(vector<int>& board, uint32_t parent, int h, int g, int zero) {
+		uint32_t allocate(vector<int> board, uint32_t parent, int h, int g, int zero) {
 			if (pool.size() == pool.capacity()) {
 				pool.reserve(pool.capacity() * 2);
-				uint32_t index = pool.size();
-				pool.push_back({board, parent, h, g, zero});
-				return index;
 			}
-			return (uint32_t)pool.size();
+			uint32_t index = pool.size();
+			pool.push_back({std::move(board), parent, h, g, zero}); // 必ずここを通る！
+			return index;
 		}
 
 		const Node& get(uint32_t index) const {
@@ -196,47 +195,48 @@ class ManhattanDistance {
 	public:
 		vector<int> vec;
 		ManhattanDistance(int n) {
-			res.assign(n, vector<int>(n, 0));
+			res.assign(n, vector<int>(n, -1));
 			vec.assign(n * n, 0);
 			place.assign(n * n, {0, 0});
 			char dir = 'R'; // L U R D
 			int dy = 0, dx = -1;
 			int i = 1;
-			while (i < n * n) {
+			while (i <= n * n) {
+				int val = (i == n * n) ? 0 : i;
 				if (dir == 'R') {
-					if (check(dy, dx + 1, n) && res[dy][dx + 1] == 0) {
+					if (check(dy, dx + 1, n) && res[dy][dx + 1] == -1) {
 						++dx;
-						res[dy][dx] = i;
+						res[dy][dx] = val;
 					} else {
 						dir = 'D';
 						continue;
 					}
 				} else if (dir == 'D') {
-					if (check(dy + 1, dx, n) && res[dy + 1][dx] == 0) {
+					if (check(dy + 1, dx, n) && res[dy + 1][dx] == -1) {
 						++dy;
-						res[dy][dx] = i;
+						res[dy][dx] = val;
 					} else {
 						dir = 'L';
 						continue;
 					}
 				} else if (dir == 'L') {
-					if (check(dy, dx - 1, n) && res[dy][dx - 1] == 0) {
+					if (check(dy, dx - 1, n) && res[dy][dx - 1] == -1) {
 						--dx;
-						res[dy][dx] = i;
+						res[dy][dx] = val;
 					} else {
 						dir = 'U';
 						continue;
 					}
 				} else if (dir == 'U') {
-					if (check(dy - 1, dx, n) && res[dy - 1][dx] == 0) {
+					if (check(dy - 1, dx, n) && res[dy - 1][dx] == -1) {
 						--dy;
-						res[dy][dx] = i;
+						res[dy][dx] = val;
 					} else {
 						dir = 'R';
 						continue;
 					}
 				}
-				place[i] = {dy, dx};
+				place[val] = {dy, dx};
 				++i;
 			}
 			for (int y = 0; y < n; ++y) {
@@ -250,7 +250,7 @@ class ManhattanDistance {
 			for (int i = 0; i < n * n; ++i) {
 				if (a[i] == 0) continue;
 				int y = i / n, x = i % n;
-				sum += abs(y - place[a[i]].first + x - place[a[i]].second);
+				sum += abs(y - place[a[i]].first) + abs(x - place[a[i]].second);
 			}
 			return sum;
 		}
@@ -304,16 +304,20 @@ void solvePuzzle(State init, ManhattanDistance md) {
 		uint32_t current_idx = open_set.top();
 		open_set.pop();
 
-		const Node& nd = mp.get(current_idx);
+		// const Node& nd = mp.get(current_idx);
 
-		if (nd.h_cost == 0) {
+		vector<int> current_board = mp.get(current_idx).board;
+		int current_g = mp.get(current_idx).g_cost;
+		int current_zero = mp.get(current_idx).zero_pos;
+		int current_h = mp.get(current_idx).h_cost;
+		if (current_h == 0) {
 			goal_idx = current_idx;
 			break;
 		}
-		if (closed_set.contains(nd.board)) continue;
-		closed_set.insert(nd.board);
-		int z_y = nd.zero_pos / init.size;
-		int z_x = nd.zero_pos % init.size;
+		if (closed_set.contains(current_board)) continue;
+		closed_set.insert(current_board);
+		int z_y = current_zero / init.size;
+		int z_x = current_zero % init.size;
 
 		for (int i = 0; i < 4; ++i) {
 			int ny = z_y + dy[i];
@@ -323,11 +327,11 @@ void solvePuzzle(State init, ManhattanDistance md) {
 
 			int new_zero = ny * init.size + nx;
 
-			vector<int> neighbor_board = nd.board;
-			swap(neighbor_board[nd.zero_pos], neighbor_board[new_zero]);
+			vector<int> neighbor_board = current_board;
+			swap(neighbor_board[current_zero], neighbor_board[new_zero]);
 			if (closed_set.contains(neighbor_board)) continue;
 
-			int new_g = nd.g_cost + 1;
+			int new_g = current_g + 1;
             int new_h = md.dist(neighbor_board, init.size);
 
 			uint32_t neighbor_idx = mp.allocate(neighbor_board, current_idx, new_h, new_g, new_zero);
