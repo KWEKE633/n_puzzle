@@ -10,6 +10,8 @@
 
 using namespace std;
 
+#define MAX_SIZE 17
+
 #include <chrono>
 class Timer {
 	chrono::system_clock::time_point start_time;
@@ -103,9 +105,6 @@ struct CompareNode {
 		return na.f(weight) > nb.f(weight);
 	}
 };
-// 使い方:
-// CompareNode comp(&pool);
-// std::priority_queue<uint32_t, vector<uint32_t>, CompareNode> open_set(comp);
 
 bool loadPuzzle(const string& filename, State& out_state) {
 	ifstream file(filename);
@@ -130,9 +129,11 @@ bool loadPuzzle(const string& filename, State& out_state) {
 		int val;
 		while (ss >> val) {
 			if (size == -1) {
+				if (val <= 2 || MAX_SIZE <= val) return false;
 				size = val;
 				out_state.size = size;
 			} else {
+				if (val <= 2 || MAX_SIZE * MAX_SIZE <= val) return false;
 				numbers.push_back(val);
 			}
 		}
@@ -298,12 +299,12 @@ class Heuristic {
 				int y = i / n, x = i % n;
 				sum += abs(y - place[a[i]].first) + abs(x - place[a[i]].second);
 			}
-			return sum;
+			return sum + linearConflict(a, n);
 		}
 
 		int hamming(const vector<int>& a, int n) {
 			int misplaced = 0;
-			for (int i = 0; i < n; ++i) {
+			for (int i = 0; i < n * n; ++i) {
 				if (a[i] == 0) continue;
 				int y = i / n, x = i % n;
 				if (y != place[a[i]].first || x != place[a[i]].second) {
@@ -315,7 +316,7 @@ class Heuristic {
 
 		int euclidean(const vector<int>& a, int n) {
 			double sum = 0;
-			for (int i = 0; i < n; ++i) {
+			for (int i = 0; i < n * n; ++i) {
 				if (a[i] == 0) continue;
 				int y = i / n, x = i % n;
 				double dy = y - place[a[i]].first;
@@ -464,7 +465,7 @@ int main(int argc, char **argv) {
 		idx = 2;
 		if (arg1 == "-m") c = 'm';
 		else if (arg1 == "-h") c = 'h';
-		else if (arg1 == "e") c = 'e';
+		else if (arg1 == "-e") c = 'e';
 		else {
 			cerr << "Usage: " << argv[1] << " option not found." << endl;
 			return 1;
@@ -501,17 +502,17 @@ int main(int argc, char **argv) {
 	}
 	if (c == 'm') {
 		solvePuzzle(init, [&md](const vector<int>& b, int n) {
-			return md.hamming(b, n);
+			return md.manhattan(b, n);
 		}, weight);
 	} 
-	else if (c == 3) {
+	else if (c == 'e') {
 		solvePuzzle(init, [&md](const vector<int>& b, int n) {
 			return md.euclidean(b, n);
 		}, weight);
 	} 
 	else {
 		solvePuzzle(init, [&md](const vector<int>& b, int n) {
-			return md.manhattan(b, n);
+			return md.hamming(b, n);
 		}, weight);
 	}
 	cout << "Execution Time: " << timer.elapsed() << "ms" << endl;

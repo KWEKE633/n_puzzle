@@ -1,0 +1,9 @@
+# Auto-generated Solvable Snail Map N=6
+# Shuffled with 1800 valid moves
+6
+23	4	22	35	7	16
+18	19	25	2	12	24
+1	31	10	6	33	3
+34	9	14	27	11	20
+13	32	29	26	30	8
+21	0	15	28	17	5
