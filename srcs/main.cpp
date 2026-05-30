@@ -6,6 +6,7 @@
 #include <cmath>
 #include <queue>
 #include <unordered_set>
+#include <string_view>
 
 using namespace std;
 
@@ -37,8 +38,8 @@ struct Node {
 	int g_cost;
 	int zero_pos;
 
-	int f() const {
-		return h_cost + g_cost;
+	int f(int w) const {
+		return w * h_cost + g_cost;
 	}
 };
 
@@ -90,15 +91,16 @@ struct BoardEqual {
 
 struct CompareNode {
 	MemoryPool* pool;
-	CompareNode(MemoryPool* p) : pool(p) {}
+	int weight;
+	CompareNode(MemoryPool* p, int w) : pool(p), weight(w) {}
 
 	bool operator()(uint32_t a, uint32_t b) const {
 		const Node& na = pool->get(a);
 		const Node& nb = pool->get(b);
-		if (na.f() == nb.f()) {
+		if (na.f(weight) == nb.f(weight)) {
 			return na.h_cost > nb.h_cost;
 		}
-		return na.f() > nb.f();
+		return na.f(weight) > nb.f(weight);
 	}
 };
 // 使い方:
@@ -189,12 +191,12 @@ int countInv(const vector<int>& board) {
 	return inv;
 }
 
-class ManhattanDistance {
+class Heuristic {
 	vector<vector<int>> res;
 	vector<pair<int, int>> place;
 	public:
 		vector<int> vec;
-		ManhattanDistance(int n) {
+		Heuristic(int n) {
 			res.assign(n, vector<int>(n, -1));
 			vec.assign(n * n, 0);
 			place.assign(n * n, {0, 0});
@@ -245,7 +247,51 @@ class ManhattanDistance {
 				}
 			}
 		}
-		int dist(vector<int>& a, int n) {
+
+		int linearConflict(const vector<int>& a, int n) {
+			int conflict = 0;
+
+			// 1. 行(Row)のコンフリクト判定
+			for (int y = 0; y < n; ++y) {
+				for (int x1 = 0; x1 < n - 1; ++x1) {
+					for (int x2 = x1 + 1; x2 < n; ++x2) {
+						int t1 = a[y * n + x1]; // 左側のタイル
+						int t2 = a[y * n + x2]; // 右側のタイル
+						if (t1 == 0 || t2 == 0) continue;
+
+						// 両方のタイルが「現在の行(y)」を本来の目的地(place.first)としているか？
+						if (place[t1].first == y && place[t2].first == y) {
+							// 本来のX座標(place.second)が逆転しているか？
+							if (place[t1].second > place[t2].second) {
+								conflict += 2; // 避けるために+2手必要
+							}
+						}
+					}
+				}
+				}
+
+				// 2. 列(Column)のコンフリクト判定
+				for (int x = 0; x < n; ++x) {
+				for (int y1 = 0; y1 < n - 1; ++y1) {
+					for (int y2 = y1 + 1; y2 < n; ++y2) {
+						int t1 = a[y1 * n + x]; // 上側のタイル
+						int t2 = a[y2 * n + x]; // 下側のタイル
+						if (t1 == 0 || t2 == 0) continue;
+
+						// 両方のタイルが「現在の列(x)」を本来の目的地としているか？
+						if (place[t1].second == x && place[t2].second == x) {
+							// 本来のY座標が逆転しているか？
+							if (place[t1].first > place[t2].first) {
+								conflict += 2;
+							}
+						}
+					}
+				}
+			}
+			return conflict;
+		}
+
+		int manhattan(const vector<int>& a, int n) {
 			int sum = 0;
 			for (int i = 0; i < n * n; ++i) {
 				if (a[i] == 0) continue;
@@ -254,9 +300,33 @@ class ManhattanDistance {
 			}
 			return sum;
 		}
+
+		int hamming(const vector<int>& a, int n) {
+			int misplaced = 0;
+			for (int i = 0; i < n; ++i) {
+				if (a[i] == 0) continue;
+				int y = i / n, x = i % n;
+				if (y != place[a[i]].first || x != place[a[i]].second) {
+					misplaced++;
+				}
+			}
+			return misplaced;
+		}
+
+		int euclidean(const vector<int>& a, int n) {
+			double sum = 0;
+			for (int i = 0; i < n; ++i) {
+				if (a[i] == 0) continue;
+				int y = i / n, x = i % n;
+				double dy = y - place[a[i]].first;
+				double dx = x - place[a[i]].second;
+				sum += sqrt(dy * dy + dx * dx);
+			}
+			return (int)sum;
+		}
 };
 
-bool checkSolvable(State& init, ManhattanDistance& md) {
+bool checkSolvable(State& init, Heuristic& md) {
 	int I_init = countInv(init.board);
 	int I_target = countInv(md.vec);
 	int R_init = 0, R_target = 0;
@@ -282,9 +352,10 @@ bool checkSolvable(State& init, ManhattanDistance& md) {
 	}
 }
 
-void solvePuzzle(State init, ManhattanDistance md) {
+template <typename HeuristicFunc>
+void solvePuzzle(State init, HeuristicFunc h_func, int weight = 1) {
 	MemoryPool mp;
-	CompareNode comp(&mp);
+	CompareNode comp(&mp, weight);
 	priority_queue<uint32_t, vector<uint32_t>, CompareNode> open_set(comp);
 	unordered_set<vector<int>, BoardHash, BoardEqual> closed_set;
 
@@ -295,7 +366,8 @@ void solvePuzzle(State init, ManhattanDistance md) {
 			break;
 		}
 	}
-	uint32_t start_idx = mp.allocate(init.board, UINT32_MAX, md.dist(init.board, init.size), 0, zero);
+	int initial_h = h_func(init.board, init.size);
+	uint32_t start_idx = mp.allocate(init.board, UINT32_MAX, initial_h, 0, zero);
 	open_set.push(start_idx);
 
 	uint32_t goal_idx = UINT32_MAX;
@@ -332,7 +404,7 @@ void solvePuzzle(State init, ManhattanDistance md) {
 			if (closed_set.contains(neighbor_board)) continue;
 
 			int new_g = current_g + 1;
-            int new_h = md.dist(neighbor_board, init.size);
+            int new_h = h_func(neighbor_board, init.size);
 
 			uint32_t neighbor_idx = mp.allocate(neighbor_board, current_idx, new_h, new_g, new_zero);
             open_set.push(neighbor_idx);	
@@ -348,31 +420,100 @@ void solvePuzzle(State init, ManhattanDistance md) {
 			curr = mp.get(curr).parents_index;
 		}
 
-		cout << "Solved in " << path.size() - 1 << " moves!" << endl;
+		cout << "\n==========================================" << endl;
+		cout << "            🎯 SOLUTION PATH 🎯            " << endl;
+		cout << "==========================================" << endl;
+
+		int move_cnt = 0;
+		for (int p = (int)path.size() - 1; p >= 0; --p) {
+			uint32_t node_idx = path[p];
+			const Node& node = mp.get(node_idx);
+
+			if (move_cnt == 0) {
+				cout << "\n[📊 Initial State]" << endl;
+			} else {
+				cout << "\n[➡️ Move " << move_cnt << "]" << endl;
+			}
+
+			for (int y = 0; y < init.size; ++y) {
+				for (int x = 0; x < init.size; ++x) {
+					int val = node.board[y * init.size + x];
+					if (val == 0) cout << "0\t";
+					else cout << val << "\t";
+				}
+				cout << "\n";
+			}
+			cout << "------------------------------------------" << endl;
+			move_cnt++;
+		}
+
+		cout << "\n[🏁 Search Summary]" << endl;
+		cout << "Total moves (Solution depth) : " << path.size() - 1 << endl;
 		cout << "Time complexity (Total states selected): " << closed_set.size() << endl;
 		cout << "Size complexity (Max states in memory): " << mp.size() << endl;
 	}
 }
 
-int main(int argc, char ** argv) {
-	if (argc != 2) {
-		cerr << "Usage: " << argv[0] << " <puzzle_file>" << endl;
+int main(int argc, char **argv) {
+	int idx = -1, weight = 1;
+	char c = 'm'; // default は マンハッタン
+	string_view arg1(argv[1]);
+	if (argc == 2) {
+		idx = 1;
+	} else if (argc == 3) {
+		idx = 2;
+		if (arg1 == "-m") c = 'm';
+		else if (arg1 == "-h") c = 'h';
+		else if (arg1 == "e") c = 'e';
+		else {
+			cerr << "Usage: " << argv[1] << " option not found." << endl;
+			return 1;
+		}
+	} else if (argc == 4) {
+		idx = 3;
+		if (arg1 == "-m") c = 'm';
+		else if (arg1 == "-h") c = 'h';
+		else if (arg1 == "-e") c = 'e';
+		else {
+			cerr << "Usage: " << argv[1] << " option not found." << endl;
+			return 1;
+		}
+		string_view arg2(argv[2]);
+		if (arg2 == "-g")  weight = 5; // 調整可能
+		else {
+			cerr << "Usage: " << argv[2] << " not found." << endl;
+			return 1;
+		}
+	}
+	if (idx == -1) {
+		cerr << "Usage: " << "Invalid argment number." << endl;
 		return 1;
 	}
 	State init;
-	if (!loadPuzzle(argv[1], init)) {
+	if (!loadPuzzle(argv[idx], init)) {
 		return 1;
 	}
 	Timer timer;
-	ManhattanDistance md(init.size);
+	Heuristic md(init.size);
 	if (!checkSolvable(init, md)) {
 		cout << "Oh, Cannot solve puzzle!" << endl;
 		return 0;
 	}
-	// TODO: 1. 解の存在判定
-	solvePuzzle(init, md);
-    // TODO: 2. A* 探索アルゴリズムの実行
-    // TODO: 3. 結果の出力
+	if (c == 'm') {
+		solvePuzzle(init, [&md](const vector<int>& b, int n) {
+			return md.hamming(b, n);
+		}, weight);
+	} 
+	else if (c == 3) {
+		solvePuzzle(init, [&md](const vector<int>& b, int n) {
+			return md.euclidean(b, n);
+		}, weight);
+	} 
+	else {
+		solvePuzzle(init, [&md](const vector<int>& b, int n) {
+			return md.manhattan(b, n);
+		}, weight);
+	}
 	cout << "Execution Time: " << timer.elapsed() << "ms" << endl;
 	return 0;
 }
