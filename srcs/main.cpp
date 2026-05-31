@@ -133,7 +133,7 @@ bool loadPuzzle(const string& filename, State& out_state) {
 				size = val;
 				out_state.size = size;
 			} else {
-				if (val <= 2 || MAX_SIZE * MAX_SIZE <= val) return false;
+				if (val < 0  || MAX_SIZE * MAX_SIZE <= val) return false;
 				numbers.push_back(val);
 			}
 		}
