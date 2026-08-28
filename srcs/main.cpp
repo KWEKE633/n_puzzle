@@ -456,6 +456,10 @@ void solvePuzzle(State init, HeuristicFunc h_func, int weight = 1) {
 }
 
 int main(int argc, char **argv) {
+	if (argc < 2 || 4 < argc) {
+		cerr << "Usage: " << "Wrong argments." << endl;
+		return 1;
+	}
 	int idx = -1, weight = 1;
 	char c = 'm'; // default は マンハッタン
 	string_view arg1(argv[1]);
