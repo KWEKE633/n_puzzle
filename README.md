@@ -49,8 +49,9 @@ Run the executable by passing the puzzle map file as the primary argument. You c
 ## Command-Line Options
 Flag,Description,Default
 "-m, --manhattan",Uses Manhattan Distance as the heuristic. Guarantees optimal path.,Yes
-"-u, --misplaced",Uses Misplaced Tiles (Hamming Distance) as the heuristic.,No
-"-w <float>, --weight <float>",Applies a multiplier to the heuristic (Weighted A*). Sacrifices path optimality for significantly faster execution times on massive boards (N≥5).,1.0
+"-h, --misplaced",Uses Misplaced Tiles (Hamming Distance) as the heuristic.,No
+"-e, --euqlid", Uses Euqlid Distance as the heuristic.,No
+"-g <int>, --weight <int>",Applies a multiplier to the heuristic (Weighted A*). Sacrifices path optimality for significantly faster execution times on massive boards (N≥5).,1.0
 
 ## Examples
 
